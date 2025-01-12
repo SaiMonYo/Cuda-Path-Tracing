@@ -9,6 +9,7 @@ class sphere: public hitable  {
         __device__ sphere(vec3 cen, float r, material *m) : center(cen), radius(r), mat_ptr(m)  {};
         __device__ virtual bool hit(const ray& r, float tmin, float tmax, hit_record& rec) const;
         __device__ virtual Shapes type() const;
+        __device__ virtual vec3 random_point_on_surface(curandState *local_rand_state) const;
 
         vec3 center;
         float radius;
@@ -44,6 +45,10 @@ __device__ bool sphere::hit(const ray& r, float t_min, float t_max, hit_record& 
 
 __device__ Shapes sphere::type() const{
     return SPHERE;
+}
+
+__device__ vec3 sphere::random_point_on_surface(curandState *local_rand_state) const{
+    return center + random_in_unit_sphere(local_rand_state) * radius;
 }
 
 #endif

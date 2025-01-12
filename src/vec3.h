@@ -30,6 +30,7 @@ public:
     __host__ __device__ inline vec3& operator/=(const vec3 &v2);
     __host__ __device__ inline vec3& operator*=(const float t);
     __host__ __device__ inline vec3& operator/=(const float t);
+    __host__ __device__ inline bool operator==(const vec3 &v2);
 
     __host__ __device__ inline float length() const { return sqrt(e[0]*e[0] + e[1]*e[1] + e[2]*e[2]); }
     __host__ __device__ inline float squared_length() const { return e[0]*e[0] + e[1]*e[1] + e[2]*e[2]; }
@@ -139,8 +140,26 @@ __host__ __device__ inline vec3& vec3::operator/=(const float t) {
     return *this;
 }
 
+__host__ __device__ inline bool vec3::operator==(const vec3 &v2){
+    return (v2.x() == e[0] && v2.y() == e[1] && v2.z() == e[0]);
+}
+
+__host__ __device__ inline bool is_zero_vector(const vec3 v){
+    return (v.x() == 0.0f && v.y() == 0.0f && v.z() == 0.0f);
+}
+
 __host__ __device__ inline vec3 unit_vector(vec3 v) {
     return v / v.length();
+}
+
+#define RANDVEC3 vec3(curand_uniform(local_rand_state),curand_uniform(local_rand_state),curand_uniform(local_rand_state))
+
+__device__ vec3 random_in_unit_sphere(curandState *local_rand_state) {
+    vec3 p;
+    do {
+        p = 2.0f*RANDVEC3 - vec3(1,1,1);
+    } while (p.squared_length() >= 1.0f);
+    return p;
 }
 
 #endif

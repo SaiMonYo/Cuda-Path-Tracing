@@ -14,36 +14,87 @@ void check_cuda(cudaError_t result, char const *const func, const char *const fi
 }
 
 
-__device__ vec3 color(const ray& r, hitable **world, curandState *local_rand_state) {
+__device__ vec3 sample(const ray& r, hitable_list **world, curandState *local_rand_state) {
     ray cur_ray = r;
-    vec3 incoming_light = 0.f;
-    vec3 ray_colour = 1.f;
+    vec3 colour = 0.f;
+    vec3 throughput = 1.f;
 
     for (int i = 0; i <= 50; i++){
         hit_record rec;
-        if ((*world)->hit(cur_ray, 0.001f, FLT_MAX, rec)) {
-            ray scattered;
-            if(rec.mat_ptr->scatter(cur_ray, rec, scattered, local_rand_state)) {
-                cur_ray = scattered;
+        if (!(*world)->hit(cur_ray, 0.001f, FLT_MAX, rec)) {
+            break;
+        }
+        material *mat = rec.mat_ptr;
+        
+        if (mat->emission_strength > 0.0f){
+            if (i==0){
+                colour = throughput * mat->emission_colour * mat->emission_strength;
             }
-            //return rec.normal;
-            material *mat = rec.mat_ptr;
-            vec3 emitted_light = mat->emission_colour * mat->emission_strength;
-            float light_strength = dot(rec.normal, r.direction());
-            incoming_light += emitted_light * ray_colour;
-            ray_colour *= mat->colour;
+            break;
+        }
 
-            float p = fmax(ray_colour.x(), fmax(ray_colour.y(), ray_colour.z()));
-            if (curand_uniform(local_rand_state) >= p){
-                break;
+
+        // pick random emitter to sample 
+        hitable *random_emitter = (*world)->get_random_emitter(local_rand_state);
+        vec3 random_point_on_emitter = random_emitter->random_point_on_surface(local_rand_state);
+
+        float emitter_area = random_emitter->area();
+
+        vec3 to_light = random_point_on_emitter - rec.p;
+        float distance_to_light_squared = to_light.squared_length();
+        float distance_to_light = sqrtf(distance_to_light_squared);
+
+        to_light = to_light / distance_to_light;
+
+        // calculate the normal of the emitter at the random sampled point
+        vec3 light_normal = random_emitter->normal(random_point_on_emitter);
+
+        float cos_o = -dot(to_light, light_normal);
+        float cos_i = dot(to_light, rec.normal);
+
+        // the light can contribute to the hit location
+        if (cos_o > 0.0f && cos_i > 0.0f){
+            // trace shadow ray to the point to see if it can cantribute
+            ray shadow_ray = ray(rec.p, to_light);
+            hit_record shadow_rec;
+            if (!(*world)->hit(shadow_ray, 0.001f, distance_to_light - 0.001f, shadow_rec)){
+                // Lambertian just at the minute
+                vec3 brdf = mat->colour * 1 / M_PI;
+                float solid_angle = (cos_o * emitter_area) / distance_to_light_squared;
+
+                material *light_mat = random_emitter->mat_ptr;
+                vec3 emitter_colour = light_mat->emission_colour * light_mat->emission_strength;
+
+                // weight this sample
+                colour += throughput * brdf * emitter_colour * solid_angle * cos_i;
             }
-            ray_colour *= 1.f / p;
+        }
+
+        ray scattered;
+        vec3 attenuation;
+        // get the scattered ray
+        if(rec.mat_ptr->scatter(cur_ray, rec, attenuation, scattered, local_rand_state)) {
+            cur_ray = scattered;
         }
         else{
             break;
         }
+
+        throughput *= mat->colour;
+
+        // apply russian roulette if theres been 4 bounces
+        if (i >= 4){
+            float one_minus_p = fmax(throughput.x(), fmax(throughput.y(), throughput.z()));
+
+            if (curand_uniform(local_rand_state) > one_minus_p){
+                break;
+            }
+            // weight throughput if it wasnt culled
+            throughput /= one_minus_p;
+        }
+
     }
-    return incoming_light;
+    return colour;
 }
 
 __global__ void rand_init(curandState *rand_state) {
@@ -60,7 +111,7 @@ __global__ void render_init(int max_x, int max_y, curandState *rand_state) {
     curand_init(1984+pixel_index, 0, 0, &rand_state[pixel_index]);
 }
 
-__global__ void render(vec3 *fb, int max_x, int max_y, int ns, camera **cam, hitable **world, curandState *rand_state) {
+__global__ void render(vec3 *fb, int max_x, int max_y, int ns, camera **cam, hitable_list **world, curandState *rand_state) {
     int i = threadIdx.x + blockIdx.x * blockDim.x;
     int j = threadIdx.y + blockIdx.y * blockDim.y;
     if((i >= max_x) || (j >= max_y)) return;
@@ -71,7 +122,7 @@ __global__ void render(vec3 *fb, int max_x, int max_y, int ns, camera **cam, hit
         float u = float(i + curand_uniform(&local_rand_state)) / float(max_x);
         float v = float(j + curand_uniform(&local_rand_state)) / float(max_y);
         ray r = (*cam)->get_ray(u, v, &local_rand_state);
-        col += color(r, world, &local_rand_state);
+        col += sample(r, world, &local_rand_state);
     }
     rand_state[pixel_index] = local_rand_state;
     col /= float(ns);
@@ -85,9 +136,9 @@ __global__ void render(vec3 *fb, int max_x, int max_y, int ns, camera **cam, hit
 int main() {
     int nx = 1200;
     int ny = 1200;
-    int ns = 10000;
-    int tx = 32;
-    int ty = 32;
+    int ns = 1000;
+    int tx = 16;
+    int ty = 16;
 
     std::cerr << "Rendering a " << nx << "x" << ny << " image with " << ns << " samples per pixel ";
     std::cerr << "in " << tx << "x" << ty << " blocks.\n";
@@ -114,11 +165,11 @@ int main() {
     hitable **d_list;
     int num_hitables = 16;
     checkCudaErrors(cudaMalloc((void **)&d_list, num_hitables*sizeof(hitable *)));
-    hitable **d_world;
-    checkCudaErrors(cudaMalloc((void **)&d_world, sizeof(hitable *)));
+    hitable_list **hit_list;
+    checkCudaErrors(cudaMalloc((void **)&hit_list, sizeof(hitable_list *)));
     camera **d_camera;
     checkCudaErrors(cudaMalloc((void **)&d_camera, sizeof(camera *)));
-    create_cornell<<<1,1>>>(d_list, d_world, d_camera, nx, ny, d_rand_state2);
+    create_cornell<<<1,1>>>(d_list, hit_list, d_camera, nx, ny, d_rand_state2);
     checkCudaErrors(cudaGetLastError());
     checkCudaErrors(cudaDeviceSynchronize());
 
@@ -130,7 +181,7 @@ int main() {
     render_init<<<blocks, threads>>>(nx, ny, d_rand_state);
     checkCudaErrors(cudaGetLastError());
     checkCudaErrors(cudaDeviceSynchronize());
-    render<<<blocks, threads>>>(fb, nx, ny,  ns, d_camera, d_world, d_rand_state);
+    render<<<blocks, threads>>>(fb, nx, ny,  ns, d_camera, hit_list, d_rand_state);
     checkCudaErrors(cudaGetLastError());
     checkCudaErrors(cudaDeviceSynchronize());
     stop = clock();
@@ -142,19 +193,20 @@ int main() {
     for (int j = ny-1; j >= 0; j--) {
         for (int i = 0; i < nx; i++) {
             size_t pixel_index = j*nx + i;
-            int ir = int(255.99f*fb[pixel_index].r());
-            int ig = int(255.99f*fb[pixel_index].g());
-            int ib = int(255.99f*fb[pixel_index].b());
+            vec3 colour = clamp(fb[pixel_index], 0.0f, 1.0f);
+            int ir = int(255.99f*colour.r());
+            int ig = int(255.99f*colour.g());
+            int ib = int(255.99f*colour.b());
             std::cout << ir << " " << ig << " " << ib << "\n";
         }
     }
 
     // clean up
     checkCudaErrors(cudaDeviceSynchronize());
-    free_world<<<1,1>>>(d_list,d_world,d_camera, num_hitables);
+    free_world<<<1,1>>>(d_list, hit_list, d_camera, num_hitables);
     checkCudaErrors(cudaGetLastError());
     checkCudaErrors(cudaFree(d_camera));
-    checkCudaErrors(cudaFree(d_world));
+    checkCudaErrors(cudaFree(hit_list));
     checkCudaErrors(cudaFree(d_list));
     checkCudaErrors(cudaFree(d_rand_state));
     checkCudaErrors(cudaFree(d_rand_state2));

@@ -4,10 +4,6 @@
 #include <curand_kernel.h>
 #include "ray.h"
 
-#ifndef M_PI
-#define M_PI 3.14159265358979323846
-#endif
-
 __device__ vec3 random_in_unit_disk(curandState *local_rand_state) {
     vec3 p;
     do {

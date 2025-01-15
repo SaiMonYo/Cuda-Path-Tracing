@@ -5,9 +5,11 @@
 #include <stdlib.h>
 #include <iostream>
 
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
+
 class vec3  {
-
-
 public:
     __host__ __device__ vec3() {}
     __host__ __device__ vec3(float v) { e[0] = v; e[1] = v; e[2] = v; }
@@ -93,6 +95,18 @@ __host__ __device__ inline vec3 cross(const vec3 &v1, const vec3 &v2) {
     return vec3( (v1.e[1]*v2.e[2] - v1.e[2]*v2.e[1]),
                 (-(v1.e[0]*v2.e[2] - v1.e[2]*v2.e[0])),
                 (v1.e[0]*v2.e[1] - v1.e[1]*v2.e[0]));
+}
+
+__host__ __device__ inline vec3 min(const vec3 &v1, vec3 &v2){
+    return vec3(fmin(v1.x(), v2.x()), fmin(v1.y(), v2.y()), fmin(v1.z(), v2.z()));
+}
+
+__host__ __device__ inline vec3 max(const vec3 &v1, vec3 &v2){
+    return vec3(fmax(v1.x(), v2.x()), fmax(v1.y(), v2.y()), fmax(v1.z(), v2.z()));
+}
+
+__host__ __device__ inline vec3 clamp(const vec3 &v, float low, float high){
+    return min(max(v, vec3(low)), vec3(high));
 }
 
 

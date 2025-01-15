@@ -1,10 +1,19 @@
-#ifndef MATERIALH
-#define MATERIALH
+#pragma once
 
 struct hit_record;
 
 #include "ray.h"
 #include "hitable.h"
+
+class material  {
+public:
+    vec3 colour;
+    float emission_strength;
+    vec3 emission_colour;
+    
+    __device__ material(const vec3& c, float em_s, const vec3& em_c) : colour(c), emission_strength(em_s), emission_colour(em_c){}
+    __device__ virtual bool scatter(const ray& r_in, const hit_record& rec, vec3& attenuation, ray& scattered, curandState *local_rand_state) const = 0;
+};
 
 
 __device__ float schlick(float cosine, float ref_idx) {
@@ -30,46 +39,39 @@ __device__ vec3 reflect(const vec3& v, const vec3& n) {
 }
 
 
-
-
-class material  {
-    public:
-        vec3 colour;
-        float emission_strength;
-        vec3 emission_colour;
-        __device__ material(const vec3& c, float em_s, const vec3& em_c) : colour(c), emission_strength(em_s), emission_colour(em_c){}
-        __device__ virtual bool scatter(const ray& r_in, const hit_record& rec, vec3& attenuation, ray& scattered, curandState *local_rand_state) const = 0;
-};
-
 class lambertian : public material {
-    public:
-        __device__ lambertian(const vec3& a) : material(a,0.0f,vec3(0.0f)) {}
-        __device__ lambertian(const vec3& a, float em_s, const vec3& em_c) : material(a,em_s,em_c) {}
-        __device__ virtual bool scatter(const ray& r_in, const hit_record& rec, vec3& attenuation, ray& scattered, curandState *local_rand_state) const  {
-            vec3 target = rec.p + rec.normal + random_in_unit_sphere(local_rand_state);
-            scattered = ray(rec.p, target-rec.p);
-            attenuation = albedo;
-            return true;
-        }
+public:
+    vec3 albedo;
 
-        vec3 albedo;
+    __device__ lambertian(const vec3& a) : material(a,0.0f,vec3(0.0f)) {}
+    __device__ lambertian(const vec3& a, float em_s, const vec3& em_c) : material(a,em_s,em_c) {}
+    __device__ virtual bool scatter(const ray& r_in, const hit_record& rec, vec3& attenuation, ray& scattered, curandState *local_rand_state) const  {
+        vec3 target = rec.p + rec.normal + random_in_unit_sphere(local_rand_state);
+        scattered = ray(rec.p, target-rec.p);
+        attenuation = albedo;
+        return true;
+    }
 };
 
 class metal : public material {
-    public:
-        __device__ metal(const vec3& a, float f) : material(a,0.0f,vec3(0.0f)) { if (f < 1) fuzz = f; else fuzz = 1;}
-        __device__ virtual bool scatter(const ray& r_in, const hit_record& rec, vec3& attenuation, ray& scattered, curandState *local_rand_state) const  {
-            vec3 reflected = reflect(unit_vector(r_in.direction()), rec.normal);
-            scattered = ray(rec.p, reflected + fuzz*random_in_unit_sphere(local_rand_state));
-            attenuation = albedo;
-            return (dot(scattered.direction(), rec.normal) > 0.0f);
-        }
-        vec3 albedo;
-        float fuzz;
+public:
+    vec3 albedo;
+    float fuzz;
+
+    __device__ metal(const vec3& a, float f) : material(a,0.0f,vec3(0.0f)) { if (f < 1) fuzz = f; else fuzz = 1;}
+    __device__ virtual bool scatter(const ray& r_in, const hit_record& rec, vec3& attenuation, ray& scattered, curandState *local_rand_state) const  {
+        vec3 reflected = reflect(unit_vector(r_in.direction()), rec.normal);
+        scattered = ray(rec.p, reflected + fuzz*random_in_unit_sphere(local_rand_state));
+        attenuation = albedo;
+        return (dot(scattered.direction(), rec.normal) > 0.0f);
+    }
+    
 };
 
 class dielectric : public material {
 public:
+    float ref_idx;
+
     __device__ dielectric(float ri) : ref_idx(ri), material(vec3(1.f),0.0f,vec3(0.0f)) {}
     __device__ virtual bool scatter(const ray& r_in,
                          const hit_record& rec,
@@ -104,7 +106,4 @@ public:
             scattered = ray(rec.p, refracted);
         return true;
     }
-
-    float ref_idx;
 };
-#endif

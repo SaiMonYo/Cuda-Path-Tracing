@@ -1,20 +1,19 @@
-#ifndef SPHEREH
-#define SPHEREH
+#pragma once
 
 #include "hitable.h"
 
 class sphere: public hitable  {
-    public:
-        __device__ sphere() {}
-        __device__ sphere(vec3 cen, float r, material *m) : center(cen), radius(r), hitable(m)  {};
-        __device__ virtual bool hit(const ray& r, float tmin, float tmax, hit_record& rec) const;
-        __device__ virtual Shapes type() const;
-        __device__ virtual vec3 random_point_on_surface(curandState *local_rand_state) const;
-        __device__ virtual float area() const;
-        __device__ virtual vec3 normal(vec3 point) const;
-
-        vec3 center;
-        float radius;
+public:
+    vec3 center;
+    float radius;
+    
+    __device__ sphere() {}
+    __device__ sphere(vec3 cen, float r, material *m) : center(cen), radius(r), hitable(m)  {};
+    __device__ virtual bool hit(const ray& r, float tmin, float tmax, hit_record& rec) const;
+    __device__ virtual Shapes type() const;
+    __device__ virtual vec3 random_point_on_surface(curandState *local_rand_state) const;
+    __device__ virtual float area() const;
+    __device__ virtual vec3 normal(vec3 point) const;
 };
 
 __device__ bool sphere::hit(const ray& r, float t_min, float t_max, hit_record& rec) const {
@@ -59,5 +58,3 @@ __device__ float sphere::area() const{
 __device__ vec3 sphere::normal(vec3 point) const{
     return (point - center) / radius;
 }
-
-#endif

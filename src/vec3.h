@@ -1,5 +1,4 @@
-#ifndef VEC3H
-#define VEC3H
+#pragma once
 
 #include <math.h>
 #include <stdlib.h>
@@ -9,8 +8,12 @@
 #define M_PI 3.14159265358979323846
 #endif
 
+#define RANDVEC3 vec3(curand_uniform(local_rand_state),curand_uniform(local_rand_state),curand_uniform(local_rand_state))
+
 class vec3  {
 public:
+    float e[3];
+
     __host__ __device__ vec3() {}
     __host__ __device__ vec3(float v) { e[0] = v; e[1] = v; e[2] = v; }
     __host__ __device__ vec3(float e0, float e1, float e2) { e[0] = e0; e[1] = e1; e[2] = e2; }
@@ -37,9 +40,6 @@ public:
     __host__ __device__ inline float length() const { return sqrt(e[0]*e[0] + e[1]*e[1] + e[2]*e[2]); }
     __host__ __device__ inline float squared_length() const { return e[0]*e[0] + e[1]*e[1] + e[2]*e[2]; }
     __host__ __device__ inline void make_unit_vector();
-
-
-    float e[3];
 };
 
 
@@ -166,7 +166,13 @@ __host__ __device__ inline vec3 unit_vector(vec3 v) {
     return v / v.length();
 }
 
-#define RANDVEC3 vec3(curand_uniform(local_rand_state),curand_uniform(local_rand_state),curand_uniform(local_rand_state))
+__device__ vec3 random_in_unit_disk(curandState *local_rand_state) {
+    vec3 p;
+    do {
+        p = 2.0f*vec3(curand_uniform(local_rand_state),curand_uniform(local_rand_state),0) - vec3(1,1,0);
+    } while (dot(p,p) >= 1.0f);
+    return p;
+}
 
 __device__ vec3 random_in_unit_sphere(curandState *local_rand_state) {
     vec3 p;
@@ -175,5 +181,3 @@ __device__ vec3 random_in_unit_sphere(curandState *local_rand_state) {
     } while (p.squared_length() >= 1.0f);
     return p;
 }
-
-#endif

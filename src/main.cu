@@ -136,7 +136,7 @@ __global__ void render(vec3 *fb, int max_x, int max_y, int ns, camera **cam, hit
 int main() {
     int nx = 1200;
     int ny = 1200;
-    int ns = 1000;
+    int ns = 100;
     int tx = 16;
     int ty = 16;
 

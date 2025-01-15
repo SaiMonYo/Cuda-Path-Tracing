@@ -107,16 +107,7 @@ __global__ void create_cornell(hitable **d_list, hitable_list** hit_list, camera
 
 __global__ void free_world(hitable **d_list, hitable_list **d_world, camera **d_camera, int num_hitables) {
     for(int i=0; i < num_hitables; i++) {
-        Shapes type = d_list[i]->type();
-        if (type == SPHERE){
-            delete ((sphere *)d_list[i])->mat_ptr;
-        }
-        else if (type == TRIANGLE){
-            delete ((triangle *)d_list[i])->mat_ptr;
-        }
-        else if (type == QUAD){
-            delete ((quad *)d_list[i])->mat_ptr;
-        }
+        delete d_list[i]->mat_ptr;
         delete d_list[i];
     }
     delete d_world;

@@ -42,7 +42,6 @@ __device__ bool triangle::hit(const ray& r, float t_min, float t_max, hit_record
                 rec.t = t;
                 rec.p = r.point_at_parameter(rec.t);
                 rec.normal = n;
-                rec.mat_ptr = mat_ptr;
                 return true;
             }
         }

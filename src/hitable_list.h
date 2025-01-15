@@ -48,6 +48,7 @@ __device__ bool hitable_list::hit(const ray& r, float t_min, float t_max, hit_re
             hit_anything = true;
             closest_so_far = temp_rec.t;
             rec = temp_rec;
+            rec.mat_ptr = list[i]->mat_ptr;
         }
     }
     return hit_anything;

@@ -13,7 +13,7 @@ public:
     
     __device__ quad() {}
     __device__ quad(vec3 v_1, vec3 v_2, vec3 v_3, vec3 v_4, material *m) : 
-                    a(v_1, v_2, v_3, m), b(v_1, v_3, v_4, m), v1(v_1), hitable(m) {
+                    a(v_1, v_2, v_3, nullptr), b(v_1, v_3, v_4, nullptr), v1(v_1), hitable(m) {
                         e1 = v_2-v_1;
                         e2 = v_4-v_1;
                         n = unit_vector(cross(e1, e2));

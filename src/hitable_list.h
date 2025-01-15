@@ -2,7 +2,6 @@
 
 #include "hitable.h"
 #include "material.cuh"
-#include "assert.h"
 
 
 class hitable_list{

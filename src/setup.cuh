@@ -55,7 +55,7 @@ __global__ void create_world(hitable **d_list, hitable_list** hit_list, camera *
 
         vec3 lookfrom(13,3,2);
         vec3 lookat(0,0,0);
-        float dist_to_focus = 10;(lookfrom-lookat).length();
+        float dist_to_focus = 10;length(lookfrom-lookat);
         float aperture = 0.1f;
         *d_camera   = new camera(lookfrom,
                                  lookat,
@@ -93,7 +93,7 @@ __global__ void create_cornell(hitable **d_list, hitable_list** hit_list, camera
 
         vec3 lookfrom(278.f,273.f,-800.f);
         vec3 lookat(278.f,273.f,-799.f);
-        float dist_to_focus = (lookfrom - vec3(278, 273, 280)).length();
+        float dist_to_focus = length(lookfrom - vec3(278, 273, 280));
         float aperture = 0.025f;
         *d_camera   = new camera(lookfrom,
                                  lookat,

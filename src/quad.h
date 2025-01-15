@@ -16,7 +16,7 @@ public:
                     a(v_1, v_2, v_3, nullptr), b(v_1, v_3, v_4, nullptr), v1(v_1), hitable(m) {
                         e1 = v_2-v_1;
                         e2 = v_4-v_1;
-                        n = unit_vector(cross(e1, e2));
+                        n = normalise(cross(e1, e2));
                     };
     __device__ virtual bool hit(const ray& r, float tmin, float tmax, hit_record& rec) const;
     __device__ virtual Shapes type() const;
@@ -42,7 +42,7 @@ __device__ vec3 quad::random_point_on_surface(curandState *local_rand_state) con
 }
 
 __device__ float quad::area() const{
-    return cross(e1, e2).length();
+    return length(cross(e1, e2));
 }
 
 __device__ vec3 quad::normal(vec3 point) const{

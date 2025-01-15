@@ -41,7 +41,7 @@ __device__ vec3 sample(const ray& r, hitable_list **world, curandState *local_ra
         float emitter_area = random_emitter->area();
 
         vec3 to_light = random_point_on_emitter - rec.p;
-        float distance_to_light_squared = to_light.squared_length();
+        float distance_to_light_squared = length_squared(to_light);
         float distance_to_light = sqrtf(distance_to_light_squared);
 
         to_light = to_light / distance_to_light;
@@ -84,7 +84,7 @@ __device__ vec3 sample(const ray& r, hitable_list **world, curandState *local_ra
 
         // apply russian roulette if theres been 4 bounces
         if (i >= 4){
-            float one_minus_p = fmax(throughput.x(), fmax(throughput.y(), throughput.z()));
+            float one_minus_p = max_component(throughput);
 
             if (curand_uniform(local_rand_state) > one_minus_p){
                 break;
@@ -126,10 +126,7 @@ __global__ void render(vec3 *fb, int max_x, int max_y, int ns, camera **cam, hit
     }
     rand_state[pixel_index] = local_rand_state;
     col /= float(ns);
-    col[0] = sqrt(col[0]);
-    col[1] = sqrt(col[1]);
-    col[2] = sqrt(col[2]);
-    fb[pixel_index] = col;
+    fb[pixel_index] = sqrt(col);
 }
 
 
@@ -194,9 +191,9 @@ int main() {
         for (int i = 0; i < nx; i++) {
             size_t pixel_index = j*nx + i;
             vec3 colour = clamp(fb[pixel_index], 0.0f, 1.0f);
-            int ir = int(255.99f*colour.r());
-            int ig = int(255.99f*colour.g());
-            int ib = int(255.99f*colour.b());
+            int ir = int(255.99f*colour.x);
+            int ig = int(255.99f*colour.y);
+            int ib = int(255.99f*colour.z);
             std::cout << ir << " " << ig << " " << ib << "\n";
         }
     }

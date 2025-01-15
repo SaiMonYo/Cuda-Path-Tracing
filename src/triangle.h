@@ -14,7 +14,7 @@ public:
     __device__ triangle(vec3 v_1, vec3 v_2, vec3 v_3, material *m) : v1(v_1), v2(v_2), v3(v_3), hitable(m){
         e1 = v2 - v1;
         e2 = v3 - v1;
-        n = unit_vector(cross(e1, e2));
+        n = normalise(cross(e1, e2));
     };
     __device__ virtual bool hit(const ray& r, float tmin, float tmax, hit_record& rec) const;
     __device__ virtual Shapes type() const;
@@ -24,23 +24,23 @@ public:
 };
 
 __device__ bool triangle::hit(const ray& r, float t_min, float t_max, hit_record& rec) const {
-    vec3 h = cross(r.direction(), e2);
+    vec3 h = cross(r.direction, e2);
     float a = dot(e1, h);
 
     float f = 1.f / a;
-    vec3 s = r.origin() - v1;
+    vec3 s = r.origin - v1;
     float u = f * dot(s, h);
 
     if (u >= 0.f && u <= 1.0f){
         vec3 q = cross(s, e1);
-        float v = f * dot(r.direction(), q);
+        float v = f * dot(r.direction, q);
 
         if (v >= 0.f && u + v <= 1.f){
             float t = f * dot(e2, q);
 
             if (t > t_min && t < t_max){
                 rec.t = t;
-                rec.p = r.point_at_parameter(rec.t);
+                rec.p = r.at(rec.t);
                 rec.normal = n;
                 return true;
             }
@@ -66,7 +66,7 @@ __device__ vec3 triangle::random_point_on_surface(curandState *local_rand_state)
 }
 
 __device__ float triangle::area() const{
-    return 0.5f * cross(e1, e2).length();
+    return 0.5f * length(cross(e1, e2));
 }
 
 __device__ vec3 triangle::normal(vec3 point) const{

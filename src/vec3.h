@@ -6,8 +6,10 @@
 #include <iostream>
 
 #ifndef M_PI
-#define M_PI 3.14159265358979323846
+#define M_PI 3.14159265358979323846f
 #endif
+
+constexpr float ONE_OVER_PI = 1.0f/M_PI;
 
 #define RANDVEC3 vec3(curand_uniform(local_rand_state),curand_uniform(local_rand_state),curand_uniform(local_rand_state))
 
@@ -124,4 +126,34 @@ __device__ vec3 random_in_unit_sphere(curandState *local_rand_state) {
         p = 2.0f*RANDVEC3 - vec3(1.0f);
     } while (length_squared(p) >= 1.0f);
     return p;
+}
+
+__device__ vec3 random_cosine_weighted_direction(curandState *local_rand_state) {
+    float cos_theta_sq = curand_uniform(local_rand_state);
+    float sin_theta = sqrtf(1.0f - cos_theta_sq);
+    float cos_theta = sqrtf(cos_theta_sq);
+
+    float phi = 2 * M_PI * curand_uniform(local_rand_state);
+
+    return vec3(cosf(phi) * sin_theta, sinf(phi) * sin_theta, cos_theta);
+}
+
+__device__ vec3 orientate_hemisphere_to_other(const vec3& to_orientate, const vec3& other){
+    vec3 arbritrary_vec = (fabsf(other.x) < fabsf(other.y) && fabsf(other.x) < fabsf(other.z) || fabsf(other.y) > 0.98f)
+                            ? vec3(1.0f, 0.0f, 0.0f)
+                            : vec3(0.0f, 1.0f, 0.0f);
+    
+    // create tangent and bitangent direction vectors
+    vec3 u = normalise(cross(arbritrary_vec, other));
+    vec3 v = normalise(cross(other, u));
+
+    return to_orientate.x * u + to_orientate.y * v + to_orientate.z * other;
+}
+
+__device__ vec3 lerp(vec3 a, vec3 b, float t){
+    return a * (1-t) + b * t;
+}
+
+__device__ float lerp(float a, float b, float t){
+    return a * (1-t) + b * t;
 }

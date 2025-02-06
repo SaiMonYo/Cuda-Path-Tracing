@@ -5,6 +5,18 @@ struct hit_record;
 #include "ray.h"
 #include "hitable.h"
 
+__device__ float schlick(float cosine, float ref_idx);
+__device__ bool refract(const vec3& v, const vec3& n, float ni_over_nt, vec3& refracted);
+__device__ vec3 reflect(const vec3& v, const vec3& n);
+__device__ float fresnel_reflectance(float cos_i, float ior);
+__device__ float roughness_to_alpha(float linear_roughness);
+__device__ float ggx_D(vec3 micro_normal, float alpha_x, float alpha_y);
+__device__ float ggx_lambda(vec3 omega, float alpha_x, float alpha_y);
+__device__ float ggx_G1(vec3 omega, float alpha_x, float alpha_y);
+__device__ float ggx_G2(vec3 omega_o, vec3 omega_i, vec3 omega_m, float alpha_x, float alpha_y);
+__device__ vec3 sample_visible_normals_ggx(vec3 omega, float alpha_x, float alpha_y, curandState *local_rand_state);
+
+
 class material  {
 public:
     vec3 albedo;
@@ -14,6 +26,30 @@ public:
     __device__ material(const vec3& a, float em_s, const vec3& em_c) : albedo(a), emission_strength(em_s), emission_colour(em_c){}
     __device__ virtual bool sample(const hit_record& rec, const ray &r_in, vec3 &throughput, ray &scattered, float& pdf, curandState *local_rand_state) const = 0;
     __device__ virtual bool eval(const hit_record& rec, const vec3& w_i, const vec3& w_o, float& pdf, vec3& brdf, curandState *local_rand_state) const = 0;
+};
+
+
+class lambertian : public material {
+public:
+    __device__ lambertian(const vec3& a) : material(a,0.0f,vec3(0.0f)) {}
+    __device__ lambertian(const vec3& a, float em_s, const vec3& em_c) : material(a,em_s,em_c) {}
+    __device__ virtual bool sample(const hit_record& rec, const ray &r_in, vec3 &throughput, ray &scattered, float& pdf, curandState *local_rand_state) const {
+        vec3 direction = random_cosine_weighted_direction(local_rand_state);
+        scattered = ray(rec.p, local_to_global(direction, rec.normal));
+        pdf = direction.z * ONE_OVER_PI;
+        throughput *= albedo;
+        return true;
+    }
+
+    __device__ virtual bool eval(const hit_record& rec, const vec3& w_i, const vec3& w_o, float& pdf, vec3& brdf, curandState *local_rand_state) const{
+        float cos_i = dot(w_i, rec.normal);
+        if (cos_i < 0.0f){
+            return false;
+        }
+        brdf = albedo * cos_i * ONE_OVER_PI;
+        pdf = cos_i * ONE_OVER_PI;
+        return true;
+    }
 };
 
 
@@ -39,18 +75,17 @@ __device__ vec3 reflect(const vec3& v, const vec3& n) {
     return v - 2.0f*dot(v,n)*n;
 }
 
-__device__ float fresnel_reflectance(const hit_record &rec, vec3 w_o, float ior){
+__device__ float fresnel_reflectance(float cos_i, float ior){
     float eta1 = 1.0f;
     float eta2 = ior;
 
-    if (dot(rec.normal, w_o) < 0.0f){
+    if (cos_i < 0.0f){
         float temp = eta1;
         eta1 = eta2;
         eta2 = temp;
     }
 
     float eta = eta1 / eta2;
-    float cos_i = dot(w_o, rec.normal);
     float sint_sq = eta * eta * (1 - cos_i * cos_i);
 
     if (sint_sq >= 1.0f){
@@ -65,109 +100,67 @@ __device__ float fresnel_reflectance(const hit_record &rec, vec3 w_o, float ior)
     return 0.5 * (R_s + R_p);
 }
 
+__device__ inline float roughness_to_alpha(float linear_roughness) {
+	return fmaxf(1e-6f, square(linear_roughness));
+}
 
-class lambertian : public material {
-public:
-    __device__ lambertian(const vec3& a) : material(a,0.0f,vec3(0.0f)) {}
-    __device__ lambertian(const vec3& a, float em_s, const vec3& em_c) : material(a,em_s,em_c) {}
-    __device__ virtual bool sample(const hit_record& rec, const ray &r_in, vec3 &throughput, ray &scattered, float& pdf, curandState *local_rand_state) const {
-        vec3 direction = random_cosine_weighted_direction(local_rand_state);
-        scattered = ray(rec.p, orientate_hemisphere_to_other(direction, rec.normal));
-        pdf = direction.z * ONE_OVER_PI;
-        throughput *= albedo;
-        return true;
-    }
+__device__ float ggx_D(vec3 micro_normal, float alpha_x, float alpha_y){
+    if (micro_normal.z < 1e-6f) {
+		return 0.0f;
+	}
 
-    __device__ virtual bool eval(const hit_record& rec, const vec3& w_i, const vec3& w_o, float& pdf, vec3& brdf, curandState *local_rand_state) const{
-        float cos_i = dot(w_i, rec.normal);
-        if (cos_i < 0.0f){
-            return false;
-        }
-        brdf = albedo * cos_i * ONE_OVER_PI;
-        pdf = cos_i * ONE_OVER_PI;
-        return true;
-    }
-};
+	float sx = -micro_normal.x / (micro_normal.z * alpha_x);
+	float sy = -micro_normal.y / (micro_normal.z * alpha_y);
+
+	float sl = 1.0f + sx * sx + sy * sy;
+
+	float cos_theta_2 = micro_normal.z * micro_normal.z;
+	float cos_theta_4 = cos_theta_2 * cos_theta_2;
+
+	return 1.0f / (sl * sl * M_PI * alpha_x * alpha_y * cos_theta_4);
+}
 
 
-class plastic : public material {
-public:
-    float ior;
-    float eta_sq;
-    float R_i;
+__device__ float ggx_lambda(vec3 omega, float alpha_x, float alpha_y){
+    return 0.5f * (sqrtf(1.0f + (square(alpha_x * omega.x) + square(alpha_y * omega.y)) / square(omega.z)) - 1.0f);
+}
 
-    __device__ plastic(float ior, vec3 colour) : ior(ior), material(colour, 0.0f, vec3(0.0f)) {
-        float n_i = ior;
-        float n_i2 = n_i * n_i;
-        float n_i4 = n_i2 * n_i2;
-
-        float R_e = 0.5f 
-            + ((n_i-1)*(3.0f*n_i + 1) / (6.0f * powf((n_i + 1), 2.0f)))
-            + ((n_i2 * powf(n_i2 - 1.0f, 2.0f)) / (powf(n_i2 + 1.0f, 3.0f))) * logf((n_i - 1.0f) / (n_i + 1.0f))
-            - (((2.0f*n_i2*n_i) * (n_i2 + 2.0f*n_i - 1.0f)) / ((n_i2 + 1)*(n_i4 - 1.0f)))
-            + ((8.0f * n_i4 * (n_i4 + 1.0f)) / ((n_i2 + 1.0f) * powf(n_i4 - 1.0f, 2.0f))) * logf(n_i);
-        
-        R_i = 1.0f - (1.0f /  n_i2) * (1.0f - R_e);
-        eta_sq = powf(1.0f / ior, 2.0f);
-    }
-
-    __device__ virtual bool sample(const hit_record& rec, const ray &r_in, vec3 &throughput, ray &scattered, float& pdf, curandState *local_rand_state) const {
-        vec3 w_o = -r_in.direction;
-        float F_i = fresnel_reflectance(rec, w_o, ior);
-
-        vec3 w_i;
-        if (curand_uniform(local_rand_state) > F_i){
-            vec3 local_w_i = random_cosine_weighted_direction(local_rand_state);
-            w_i = orientate_hemisphere_to_other(local_w_i, rec.normal);
-
-        }
-        else{
-            w_i = reflect(r_in.direction, rec.normal);
-            pdf = F_i;
-        }
-        float F_o = fresnel_reflectance(rec, w_i, ior);
-
-        float cos_i = fmaxf(0.0f, dot(w_i, rec.normal));
-
-        vec3 brdf_specular = vec3(F_i);
-        vec3 brdf_diffuse = eta_sq * (1.0f-F_i) * albedo * ONE_OVER_PI * (1.0f - F_o) / (1.0f - R_i) * cos_i;
-
-        float pdf_diffuse = (1-F_i) * cos_i * ONE_OVER_PI;
-        float pdf_specular = F_i;
-        pdf = lerp(pdf_diffuse, pdf_specular, F_i);
-
-        throughput *= (brdf_specular + brdf_diffuse) / pdf;
-
-        scattered = ray(rec.p, w_i);
-
-        return true;
-    }
-
-    __device__ virtual bool eval(const hit_record& rec, const vec3& w_i, const vec3& w_o, float& pdf, vec3& brdf, curandState *local_rand_state) const{
-        float F_i = fresnel_reflectance(rec, w_o, ior);
-        float F_o = fresnel_reflectance(rec, w_i, ior);
-
-        float cos_i = fmaxf(0.0f, dot(w_i, rec.normal));
-
-        vec3 brdf_specular = vec3(F_i);
-        vec3 brdf_diffuse = eta_sq * (1.0f-F_i) * albedo * ONE_OVER_PI * (1.0f - F_o) / (1.0f - R_i) * cos_i;
-
-        float pdf_diffuse = (1-F_i) * cos_i * ONE_OVER_PI;
-        float pdf_specular = F_i;
-
-        brdf = brdf_diffuse + brdf_specular;
-
-        pdf = lerp(pdf_diffuse, pdf_specular, F_i);
-
-        return isfinite(pdf) && pdf > 0.0f;
-    } 
-};
+__device__ float ggx_G1(vec3 omega, float alpha_x, float alpha_y){
+    return 1.0f / (1.0f + ggx_lambda(omega, alpha_x, alpha_y));
+}
 
 
+__device__ float ggx_G2(vec3 omega_o, vec3 omega_i, vec3 omega_m, float alpha_x, float alpha_y){
+    bool omega_i_backfacing = dot(omega_i, omega_m) * omega_i.z <= 0.0f;
+	bool omega_o_backfacing = dot(omega_o, omega_m) * omega_o.z <= 0.0f;
 
+	if (omega_i_backfacing || omega_o_backfacing) {
+		return 0.0f;
+	} else {
+		return 1.0f / (1.0f + ggx_lambda(omega_o, alpha_x, alpha_y) + ggx_lambda(omega_i, alpha_x, alpha_y));
+	}
+}
 
+__device__ vec3 sample_visible_normals_ggx(vec3 omega, float alpha_x, float alpha_y, curandState *local_rand_state){
+	// Transform the view direction to the hemisphere configuration
+	vec3 v = normalise(vec3(alpha_x * omega.x, alpha_y * omega.y, omega.z));
 
+	// Orthonormal basis (with special case if cross product is zero)
+	float length_squared = v.x*v.x + v.y*v.y;
+	vec3 axis_1 = length_squared > 0.0f ? vec3(-v.y, v.x, 0.0f) / sqrtf(length_squared) : vec3(1.0f, 0.0f, 0.0f);
+	vec3 axis_2 = cross(v, axis_1);
 
+	// Parameterization of the projected area
+	vec3 d = random_in_unit_disk(local_rand_state);
+	float t1 = d.x;
+	float t2 = lerp(safe_sqrt(1.0f - t1*t1), d.y, 0.5f + 0.5f * v.z);
+
+	// Reproject onto hemisphere
+	vec3 n_h = t1*axis_1 + t2*axis_2 + safe_sqrt(1.0f - t1*t1 - t2*t2) * v;
+
+	// Transform the normal back to the ellipsoid configuration
+	return normalise(vec3(alpha_x * n_h.x, alpha_y * n_h.y, n_h.z));
+}
 
 
 

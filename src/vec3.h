@@ -112,6 +112,10 @@ __host__ __device__ vec3 sqrt(const vec3& v){
     return vec3(sqrtf(v.x), sqrtf(v.y), sqrtf(v.z));
 }
 
+__host__ __device__ vec3 pow(const vec3& v, float p){
+    return vec3(powf(v.x, p), powf(v.y, p), powf(v.z, p));
+}
+
 __device__ vec3 random_in_unit_disk(curandState *local_rand_state) {
     vec3 p;
     do {
@@ -138,16 +142,28 @@ __device__ vec3 random_cosine_weighted_direction(curandState *local_rand_state) 
     return vec3(cosf(phi) * sin_theta, sinf(phi) * sin_theta, cos_theta);
 }
 
-__device__ vec3 orientate_hemisphere_to_other(const vec3& to_orientate, const vec3& other){
-    vec3 arbritrary_vec = (fabsf(other.x) < fabsf(other.y) && fabsf(other.x) < fabsf(other.z) || fabsf(other.y) > 0.98f)
+__device__ vec3 local_to_global(const vec3& local, const vec3& normal){
+    vec3 arbritrary_vec = (fabsf(normal.x) < fabsf(normal.y) && fabsf(normal.x) < fabsf(normal.z) || fabsf(normal.y) > 0.98f)
                             ? vec3(1.0f, 0.0f, 0.0f)
                             : vec3(0.0f, 1.0f, 0.0f);
     
     // create tangent and bitangent direction vectors
-    vec3 u = normalise(cross(arbritrary_vec, other));
-    vec3 v = normalise(cross(other, u));
+    vec3 u = normalise(cross(arbritrary_vec, normal));
+    vec3 v = normalise(cross(normal, u));
 
-    return to_orientate.x * u + to_orientate.y * v + to_orientate.z * other;
+    return local.x * u + local.y * v + local.z * normal;
+}
+
+__device__ vec3 global_to_local(const vec3& global, const vec3& normal){
+    vec3 arbritrary_vec = (fabsf(normal.x) < fabsf(normal.y) && fabsf(normal.x) < fabsf(normal.z) || fabsf(normal.y) > 0.98f)
+                            ? vec3(1.0f, 0.0f, 0.0f)
+                            : vec3(0.0f, 1.0f, 0.0f);
+    
+    // create tangent and bitangent direction vectors
+    vec3 u = normalise(cross(arbritrary_vec, normal));
+    vec3 v = normalise(cross(normal, u));
+
+    return vec3(dot(u, global), dot(v, global), dot(normal, global));
 }
 
 __device__ vec3 lerp(vec3 a, vec3 b, float t){
@@ -156,4 +172,12 @@ __device__ vec3 lerp(vec3 a, vec3 b, float t){
 
 __device__ float lerp(float a, float b, float t){
     return a * (1-t) + b * t;
+}
+
+__device__ inline float square(float a){
+    return a * a;
+}
+
+__device__ inline float safe_sqrt(float a){
+    return a < 0 ? 0 : sqrtf(a);
 }

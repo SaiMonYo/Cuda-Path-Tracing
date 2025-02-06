@@ -20,7 +20,7 @@ __global__ void rand_init(curandState *rand_state) {
     }
 }
 
-#define pink vec3(1.0f, 0.01f, 0.9f);
+#define pink vec3(1.0f, 0.01f, 0.9f)
 
 __global__ void render_init(int max_x, int max_y, curandState *rand_state) {
     int i = threadIdx.x + blockIdx.x * blockDim.x;
@@ -29,6 +29,8 @@ __global__ void render_init(int max_x, int max_y, curandState *rand_state) {
     int pixel_index = j*max_x + i;
     curand_init(1984+pixel_index, 0, 0, &rand_state[pixel_index]);
 }
+
+constexpr float one_over_gamma = 1.0f/2.2f;
 
 __global__ void render(vec3 *fb, int max_x, int max_y, int ns, camera **cam, hitable_list **world, curandState *rand_state) {
     int i = threadIdx.x + blockIdx.x * blockDim.x;
@@ -41,21 +43,21 @@ __global__ void render(vec3 *fb, int max_x, int max_y, int ns, camera **cam, hit
         float u = float(i + curand_uniform(&local_rand_state)) / float(max_x);
         float v = float(j + curand_uniform(&local_rand_state)) / float(max_y);
         ray r = (*cam)->get_ray(u, v, &local_rand_state);
-        col += Sample::naive(r, world, &local_rand_state);
+        col += Sample::NEE(r, world, &local_rand_state);
     }
     rand_state[pixel_index] = local_rand_state;
     if (col.x != col.x || col.y != col.y || col.z != col.z){
-        col = pink;
+        col = pink * ns;
     }
     col /= float(ns);
-    fb[pixel_index] = sqrt(col);
+    fb[pixel_index] = pow(col, one_over_gamma);
 }
 
 
 int main() {
     int nx = 1200;
     int ny = 1200;
-    int ns = 50000;
+    int ns = 1000;
     int tx = 16;
     int ty = 16;
 
@@ -82,7 +84,7 @@ int main() {
 
     // make our world of hitables & the camera
     hitable **d_list;
-    int num_hitables = 17;
+    int num_hitables = 16;
     checkCudaErrors(cudaMalloc((void **)&d_list, num_hitables*sizeof(hitable *)));
     hitable_list **hit_list;
     checkCudaErrors(cudaMalloc((void **)&hit_list, sizeof(hitable_list *)));

@@ -53,16 +53,13 @@ __device__ vec3 NEE(const ray& r, hitable_list **world, curandState *local_rand_
 
                 float pdf;
                 vec3 brdf;
-                if(!mat->eval(rec, to_light, -cur_ray.direction, pdf, brdf, local_rand_state)){
-                    assert(0);
-                    break;
+                if(mat->eval(rec, to_light, -cur_ray.direction, pdf, brdf, local_rand_state)){
+                    material *light_mat = random_emitter->mat_ptr;
+                    vec3 emitter_colour = light_mat->emission_colour * light_mat->emission_strength;
+
+                    // weight this sample
+                    radiance += throughput * brdf * emitter_colour * solid_angle;
                 }
-
-                material *light_mat = random_emitter->mat_ptr;
-                vec3 emitter_colour = light_mat->emission_colour * light_mat->emission_strength;
-
-                // weight this sample
-                radiance += throughput * brdf * emitter_colour * solid_angle;
             }
         }
 
@@ -94,7 +91,7 @@ __device__ vec3 NEE(const ray& r, hitable_list **world, curandState *local_rand_
 
 __device__ vec3 naive(const ray& r, hitable_list **world, curandState *local_rand_state) {
     ray cur_ray = r;
-    vec3 incoming_light = 0.f;
+    vec3 radiance = 0.f;
     vec3 throughput = 1.f;
 
     for (int i = 0; i <= 50; i++){
@@ -102,7 +99,7 @@ __device__ vec3 naive(const ray& r, hitable_list **world, curandState *local_ran
         if ((*world)->hit(cur_ray, 0.001f, FLT_MAX, rec)) {
             material *mat = rec.mat_ptr;
             vec3 emitted_light = mat->emission_colour * mat->emission_strength;
-            incoming_light += emitted_light * throughput;
+            radiance += emitted_light * throughput;
             ray scattered;
             float pdf;
             if(rec.mat_ptr->sample(rec, cur_ray, throughput, scattered, pdf, local_rand_state)) {
@@ -119,7 +116,7 @@ __device__ vec3 naive(const ray& r, hitable_list **world, curandState *local_ran
             break;
         }
     }
-    return incoming_light;
+    return radiance;
 }
 
 }

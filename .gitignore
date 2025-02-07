@@ -1,3 +1,12 @@
+*
+!/**/
+!*.*
+
 build/
 .vscode/
 .clangd
+.DS_Store
+*.out
+*.obj
+*.exe
+obj_loader/vec3.h

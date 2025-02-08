@@ -1,4 +1,9 @@
-#include "vec3.h"
+#pragma once
+
+#include <cstddef>
+#include <assert.h>
+#include <string>
+#include <cstring>
 
 class CharHolder{
 public:
@@ -31,7 +36,8 @@ public:
         length = end - start;
     }
 
-	inline const char& operator[](int index) const { assert(index >= 0 && index < length); return start[index]; }
+	inline const char& operator[](int index) { assert(index >= 0 && (unsigned)index < length); return start[index]; }
+    inline const char operator[](int index) const { assert(index >= 0 && (unsigned)index < length); return start[index]; }
 
     bool operator==(CharHolder other){
         size_t l_length = length;
@@ -41,7 +47,7 @@ public:
             return false;
         }
 
-        for (int i = 0; i < l_length; i++){
+        for (size_t i = 0; i < l_length; i++){
             if ((*this)[i] != other[i]){
                 return false;
             }

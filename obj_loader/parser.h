@@ -1,8 +1,9 @@
-#include "vec3.h"
 #include "charholder.h"
+#include <iostream>
 
 
 constexpr double FLOAT_DIGITS[] = {0.1, 0.01, 0.001, 0.0001, 0.00001, 0.000001, 0.0000001, 0.00000001, 0.000000001, 0.0000000001, 0.00000000001};
+constexpr size_t FLOAT_DIGITS_LENGTH = 11;
 
 bool is_whitespace(char c){
     return c == ' ' || c == '\t';
@@ -29,7 +30,7 @@ public:
         default of 1
         returns: value of the char initially pointed at
     */
-    char advance(int n = 1);
+    char advance(int n);
     /* 
         returns: comparision of a char with the current pointer (safely) 
     */
@@ -51,10 +52,19 @@ public:
     /* advances the pointer to the next 
        non-whitespace character */
     void skip_whitespace();
+    /* advances the pointer to the next 
+       non-whitespace or newline character */
+    void skip_whitespace_and_newlines();
+    /* parses an integer value
+       returns: the integer value (asserts there was one)*/
+    int parse_int();
+    /* parses a float value
+       returns: the integer value (asserts there was one)*/
+    float parse_float();
 };
 
 char StringParser::advance(int n = 1){
-    assert(cur + n < end && "TRYING TO ADVANCE PAST END");
+    assert(cur + n <= end && "TRYING TO ADVANCE PAST END");
 
     char c = *cur;
 
@@ -80,23 +90,98 @@ bool StringParser::match(char c){
 }
 
 bool StringParser::compare(CharHolder str){
+    assert(str.length > 0);
+
     // check within bounds
-    if (cur + str.length >= end){
+    if (cur + str.length > end){
         return false;
     }
+
+
+    for (size_t i = 0; i < str.length; i++){
+        if (cur[i] != str[i]){
+            return false;
+        }
+    }
+    return true;
 }
 
 bool StringParser::match(CharHolder str){
-    if (cur + str.length < end){
-        for (int i = 0; i < str.length; i++){
-            if (!compare(str[i])){
-                return false;
-            }
+    assert(str.length > 0);
+
+    if (!compare(str)) return false;
+    
+    advance(str.length);
+    return true;
+}
+
+void StringParser::skip_whitespace(){
+    while (cur < end && is_whitespace(*cur)){
+        advance();
+    }
+}
+
+void StringParser::skip_whitespace_and_newlines(){
+    while (cur < end && (is_whitespace(*cur) || is_newline(*cur))){
+        advance();
+    }
+}
+
+int StringParser::parse_int(){
+    bool parsed_digits = false;
+    int n = 0;
+    while(cur < end && is_digit(*cur)){
+        n = 10 * n;
+        n = n + (*cur - '0');
+        parsed_digits = true;
+        advance();
+    }
+    assert(parsed_digits);
+
+    return n;
+}
+
+float StringParser::parse_float(){
+    bool parsed_digits = false;
+
+    // integer part
+    int integral = 0;
+
+    // check if not in .X form
+    if (!compare('.')){
+        integral = parse_int();
+    }
+
+    // check its not X
+    if (!match('.')){
+        return (float) integral;
+    }
+
+    double fractional = 0;
+    size_t index = 0;
+
+    // too many digits for precision
+    bool need_to_burn = false;
+    while(cur < end && is_digit(*cur)){
+        fractional += (*cur - '0') * FLOAT_DIGITS[index++];
+        advance();
+
+        parsed_digits = true;
+
+        if (index >= FLOAT_DIGITS_LENGTH){
+            need_to_burn = true;
+            break;
         }
-        for (int i = 0; i < str.length; i++){
+    }
+
+    assert(parsed_digits);
+
+    // go to end of float
+    if (need_to_burn){
+        while(cur < end && is_digit(*cur)){
             advance();
         }
-        return true;
     }
-    return false;
+
+    return (float)( ((double)integral) + fractional);
 }

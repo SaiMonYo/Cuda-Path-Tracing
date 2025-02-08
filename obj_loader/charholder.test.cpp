@@ -1,6 +1,7 @@
 #include "charholder.h"
 #include "acutest.h"
 #include <assert.h>
+#include <string>
 
 const std::string test_strings[] = {"", "a", "abc", "abcdefghi", "aaaa", "d672", "0.", "0.232435", "0.245f"};
 const size_t test_strings_lengths[] = {0, 1, 3, 9, 4, 4, 2, 8, 6};
@@ -32,7 +33,7 @@ void test_equality(CharHolder ch, std::string str, size_t str_length){
     assert(str.length() == str_length);
     
     TEST_CHECK(ch.length == str_length);
-    for (int i = 0; i < str_length; i++){
+    for (size_t i = 0; i < str_length; i++){
         TEST_CHECK(ch[i] == str[i]);
     }
 }

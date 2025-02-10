@@ -23,6 +23,8 @@ public:
 
     StringParser(const char *str) : CharHolder(str) { cur = start; }
 
+    StringParser(CharHolder ch) : CharHolder(ch) { cur = start; }
+
     template<int N>
     constexpr StringParser(const char (& str)[N]) : CharHolder(str) { cur = start; }
     /**
@@ -61,6 +63,8 @@ public:
     /* parses a float value
        returns: the integer value (asserts there was one)*/
     float parse_float();
+    /* skips to next line*/
+    void next_line();
 };
 
 char StringParser::advance(int n = 1){
@@ -184,4 +188,13 @@ float StringParser::parse_float(){
     }
 
     return (float)( ((double)integral) + fractional);
+}
+
+void StringParser::next_line(){
+    while (cur < end && !is_newline(*cur)){
+        advance();
+    }
+    if (cur < end){
+        advance();
+    }
 }

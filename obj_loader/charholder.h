@@ -36,6 +36,12 @@ public:
         length = end - start;
     }
 
+    CharHolder(const CharHolder& ch){
+        start = ch.start;
+        end = ch.end;
+        length = end - start;
+    }
+
 	inline const char& operator[](int index) { assert(index >= 0 && (unsigned)index < length); return start[index]; }
     inline const char operator[](int index) const { assert(index >= 0 && (unsigned)index < length); return start[index]; }
 

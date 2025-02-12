@@ -57,6 +57,9 @@ public:
     /* advances the pointer to the next 
        non-whitespace or newline character */
     void skip_whitespace_and_newlines();
+    /* parses a string no punctuation
+       returns the string at the pointer location*/
+    std::string parse_string();
     /* parses an integer value
        returns: the integer value (asserts there was one)*/
     int parse_int();
@@ -129,6 +132,14 @@ void StringParser::skip_whitespace_and_newlines(){
     while (cur < end && (is_whitespace(*cur) || is_newline(*cur))){
         advance();
     }
+}
+
+std::string StringParser::parse_string(){
+    std::string ret;
+    while (isalnum(*cur)){
+        ret += advance();
+    }
+    return ret;
 }
 
 int StringParser::parse_int(){

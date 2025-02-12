@@ -26,5 +26,14 @@ BaseTriangle **parse_obj(std::string filename){
 
     StringParser parser = StringParser(file_contents);
 
+    while (parser.compare('#')){
+        parser.next_line();
+    }
+
+    if (parser.match("mtllib")){
+        parser.skip_whitespace();
+        std::string file_suffix = parser.parse_string();
+    }
+
     free((char *)file_contents.start);
 };
